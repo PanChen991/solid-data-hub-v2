@@ -1,0 +1,16 @@
+export interface FolderItem {
+  id: string;
+  name: string;
+  type: 'folder' | 'file' | 'pdf' | 'image' | 'video' | 'audio' | 'xlsx' | 'docx' | 'pptx' | 'txt' | 'zip';
+  size?: string;
+  updatedAgo?: string;
+  author?: string;
+  badge?: string;
+  badgeColor?: string;
+  children?: FolderItem[];
+  isLocked?: boolean;
+  role?: 'viewer' | 'editor' | 'admin';
+  fileUrl?: string; 
+  spaceType?: 'public' | 'department' | 'project' | 'personal';
+  departmentId?: number; 
+}
