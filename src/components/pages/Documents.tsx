@@ -1506,7 +1506,9 @@ export function Documents({ initialFolderId }: DocumentsProps) {
     // Construct real backend URL
     // Remove 'doc-' prefix if present
     const docId = item.id.replace(/^doc-/, '');
-    const apiBase = `http://${window.location.hostname}:8001`;
+    const isDev = window.location.port === '5173';
+    // If Docker/Prod (8989), use empty string (relative). If Dev (5173), use 8001.
+    const apiBase = isDev ? `http://${window.location.hostname}:8001` : '';
 
     // Get token for authentication (since new window won't have headers)
     const token = localStorage.getItem('token');
@@ -1522,7 +1524,8 @@ export function Documents({ initialFolderId }: DocumentsProps) {
   };
 
   const handleDownloadFile = (item: FolderItem) => {
-    const apiBase = `http://${window.location.hostname}:8001`;
+    const isDev = window.location.port === '5173';
+    const apiBase = isDev ? `http://${window.location.hostname}:8001` : '';
     const token = localStorage.getItem('token');
 
     if (item.type === 'folder') {

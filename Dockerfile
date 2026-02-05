@@ -10,6 +10,10 @@ RUN npm install
 COPY index.html ./
 COPY tsconfig*.json ./
 COPY vite.config.ts ./
+# Critical: Copy Tailwind and PostCSS configs so styles are generated!
+COPY tailwind.config.ts ./
+COPY postcss.config.js ./
+COPY components.json ./
 COPY public ./public
 COPY src ./src
 
@@ -21,8 +25,10 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies if needed (e.g. for some python libs)
-# RUN apt-get update && apt-get install -y gcc libpq-dev && rm -rf /var/lib/apt/lists/*
+# Install system dependencies
+# mime-support is CRITICAL for uvicorn/fastapi to guess correct content-types (css/js)
+# In newer Debian versions (Trixie/Bookworm), 'media-types' replaces 'mime-support'
+RUN apt-get update && apt-get install -y media-types && rm -rf /var/lib/apt/lists/*
 
 # Install Common Dependencies
 COPY backend/requirements.txt .

@@ -1,5 +1,9 @@
-// 动态获取后端地址，支持同局域网访问
-const API_BASE_URL = `http://${window.location.hostname}:8001`;
+// Docker/Production: Use current origin (relative path)
+// Local Dev: Default to 8001 if needed, but Vite proxy is better.
+// For now, let's detect if we are on 5173 (Dev) or 8989 (Docker).
+const isDev = window.location.port === '5173';
+const API_BASE_URL = isDev ? `http://${window.location.hostname}:8001` : '';
+// Empty string means relative path for Docker (e.g. /documents/...), served by same origin.
 
 export interface ApiResponse<T> {
     data: T | null;

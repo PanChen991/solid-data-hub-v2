@@ -18,8 +18,16 @@ import io
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from services.storage import StorageService
 from services.permission import PermissionService
+from services.permission import PermissionService
 from models import Role, SpaceType, ProjectMember, ProjectRole, Collaborator, CollaboratorRole
 from fastapi.staticfiles import StaticFiles
+import mimetypes
+
+# Fix for Docker/Slim images missing mime types
+mimetypes.init()
+mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type('text/css', '.css')
+mimetypes.add_type('image/svg+xml', '.svg')
 
 # Ensure uploads directory exists
 UPLOAD_DIR = "uploads"
