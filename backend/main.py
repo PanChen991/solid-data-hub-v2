@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, Query, Request
+from pydantic import BaseModel
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -181,6 +182,140 @@ async def create_document(
     session.refresh(doc)
     session.refresh(doc)
     return doc
+
+# --- NEW: Frontend Direct Upload Endpoints ---
+
+class DocumentRead(BaseModel):
+    id: int
+    name: str
+    oss_key: str
+    file_type: str
+    size: int
+    folder_id: Optional[int] = None
+    author_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    is_restricted: bool
+
+class UploadTokenRequest(BaseModel):
+    filename: str
+    file_size: int
+    folder_id: int
+    content_type: str = "application/octet-stream"
+
+class UploadTokenResponse(BaseModel):
+    upload_url: str
+    oss_key: str
+    method: str
+
+@app.post("/files/upload-token", response_model=UploadTokenResponse)
+async def get_upload_token(
+    req: UploadTokenRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Step 1: Get Presigned URL for Direct Upload
+    """
+    # 1. Validate Target Folder & Permissions
+    folder = session.get(Folder, req.folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Target folder not found")
+        
+    perm_service = PermissionService(session)
+    if not perm_service.check_permission(current_user, folder, 'write'):
+        raise HTTPException(status_code=403, detail="Permission denied")
+        
+    # 2. Check Duplicates
+    existing = session.exec(select(Document).where(
+        Document.folder_id == req.folder_id,
+        Document.name == req.filename,
+        Document.is_deleted == False
+    )).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="File already exists") # 409 Conflict
+
+    # 3. Generate Key & URL
+    oss_key = StorageService.generate_oss_key(req.filename)
+    url = StorageService.generate_upload_url(oss_key, req.content_type)
+    
+    return UploadTokenResponse(
+        upload_url=url,
+        oss_key=oss_key,
+        method="PUT"
+    )
+
+class UploadCompleteRequest(BaseModel):
+    oss_key: str
+    filename: str
+    folder_id: int
+    file_size: int
+    is_restricted: bool = False
+
+@app.post("/files/upload-complete", response_model=DocumentRead)
+async def complete_upload(
+    req: UploadCompleteRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Step 3: Finalize Upload (Create DB Record)
+    """
+    # 1. Validate Folder
+    folder = session.get(Folder, req.folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+        
+    # 2. Duplicate Check again to be safe
+    existing = session.exec(select(Document).where(
+        Document.folder_id == req.folder_id,
+        Document.name == req.filename,
+        Document.is_deleted == False
+    )).first()
+    if existing:
+         raise HTTPException(status_code=409, detail="File already exists")
+
+    # 3. Create Document Record
+    file_type = "unknown"
+    ext = os.path.splitext(req.filename)[1].lower()
+    if ext: file_type = ext[1:]
+
+    new_doc = Document(
+        name=req.filename,
+        folder_id=req.folder_id,
+        author_id=current_user.id,
+        oss_key=req.oss_key,
+        file_type=file_type,
+        size=req.file_size,
+        version=1,
+        is_restricted=req.is_restricted or folder.is_restricted, 
+    )
+    
+    session.add(new_doc)
+    session.commit()
+    session.refresh(new_doc)
+    
+    return new_doc
+
+# --- Local Dev: PUT Handler ---
+@app.put("/files/local-upload/{oss_key:path}")
+async def local_upload_handler(
+    oss_key: str,
+    request: Request
+):
+    """
+    Handle 'direct upload' for local dev environment.
+    Mimics OSS PUT behavior.
+    """
+    # Stream payload to file
+    local_path = os.path.join("uploads", oss_key)
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    
+    body = await request.body()
+    with open(local_path, "wb") as f:
+        f.write(body)
+        
+    return {"status": "ok"}
 
 
 class SharedResourceItem(SQLModel):
@@ -2067,3 +2202,8 @@ if os.path.exists("static"):
             
         # Fallback to index.html
         return FileResponse("static/index.html")
+
+if __name__ == "__main__":
+    import uvicorn
+    # Local Dev: Run on 8001 to distinguish from Docker(8989) and DeckPilot(8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

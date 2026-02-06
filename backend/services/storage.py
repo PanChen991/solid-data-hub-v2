@@ -88,3 +88,29 @@ class StorageService:
         else:
             # Local dev fallback
             return f"http://localhost:8000/static/uploads/{oss_key}"
+
+    @staticmethod
+    def generate_upload_url(oss_key: str, content_type: str = "application/octet-stream") -> str:
+        """
+        Generate presigned URL for PUT (Upload).
+        Valid for 600 seconds (10 minutes).
+        """
+        if bucket:
+            # Generate URL for PUT
+            # Note: Client must send the same Content-Type if we sign it? 
+            # OSS usually doesn't enforce Content-Type in signature unless specified in headers
+            # But let's keep it simple.
+            return bucket.sign_url('PUT', oss_key, 600)
+        else:
+            # Local Dev Fallback:
+            # We can't really do "client direct PUT" to a static file folder without a handler.
+            # So for local dev, we might need a special endpoint that accepts the PUT 
+            # and saves it. 
+            # For now, let's return a fake URL that verifies the frontend logic attempts it.
+            # Update: To make local dev work, we'll need a proxy endpoint or keep the old way for local.
+            # But to test the flow, let's point to a local 'put-handler' we might create, 
+            # or just return a placeholder that will fail if not handled.
+            
+            # Better strategy for local:
+            # Return a URL that points to our backend's /files/local-upload-proxy/{key}
+            return f"http://localhost:8000/api/files/local-upload/{oss_key}"

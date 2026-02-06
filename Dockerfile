@@ -25,6 +25,9 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# 在 apt-get 之前插入这一行
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list
+
 # Install system dependencies
 # mime-support is CRITICAL for uvicorn/fastapi to guess correct content-types (css/js)
 # In newer Debian versions (Trixie/Bookworm), 'media-types' replaces 'mime-support'

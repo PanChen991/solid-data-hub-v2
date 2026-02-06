@@ -512,53 +512,83 @@ export function UploadDialog({ open, onOpenChange, currentPath, currentFolderId,
         }, 50);
 
         try {
-          const { error } = await createDocument(
-            f.file,
-            targetFolderId.toString(),
-            permission === 'private'
-          );
+          // STEP 1: Get Upload Token
+          const { data: tokenData, error: tokenError } = await api.post<{ upload_url: string; oss_key: string; method: string }>('/files/upload-token', {
+            filename: f.file.name,
+            file_size: f.file.size,
+            folder_id: parseInt(targetFolderId),
+            content_type: f.file.type || 'application/octet-stream'
+          });
 
-          if (error) {
-            console.error(error);
-            isError = true;
-            clearInterval(progressTimer);
-            const isDuplicate = error.message.includes('exist') || error.message.includes('已存在');
-            const errorMsg = isDuplicate ? '文件已存在' : (error.message || '上传失败');
-
-            // Do not toast for every error if it is duplicate, just show in UI
-            if (!isDuplicate) toast.error(errorMsg);
-
-            setFiles(prev => prev.map(file =>
-              file.id === f.id ? { ...file, status: 'error', errorMessage: errorMsg } : file
-            ));
-          } else {
-            uploadComplete = true; // Signal timer to accelerate
-            await new Promise<void>(resolve => {
-              const checkDone = setInterval(() => {
-                setFiles(prev => {
-                  const file = prev.find(p => p.id === f.id);
-                  if (file && file.progress >= 100) {
-                    clearInterval(checkDone);
-                    resolve();
-                  }
-                  return prev;
-                });
-              }, 50);
-            });
-
-            clearInterval(progressTimer);
-            // toast.success(`文件 ${f.file.name} 上传成功`); // Reduce toast spam
-            setFiles(prev => prev.map(file =>
-              file.id === f.id ? { ...file, status: 'complete', progress: 100 } : file
-            ));
-
-            if (onUploadSuccess) onUploadSuccess();
+          if (tokenError || !tokenData) {
+            throw new Error(tokenError?.message || '获取上传凭证失败');
           }
-        } catch (e) {
-          isError = true;
+
+          // STEP 2: Direct Upload to OSS (or Local Proxy)
+          const uploadResponse = await fetch(tokenData.upload_url, {
+            method: tokenData.method, // usually PUT
+            body: f.file,
+            headers: {
+              // Only set Content-Type if signed, usually required for PUT
+              'Content-Type': f.file.type || 'application/octet-stream'
+            }
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error(`Upload Failed: ${uploadResponse.statusText}`);
+          }
+
+          // STEP 3: Complete Upload (Save Metadata)
+          const { error: completeError } = await api.post('/files/upload-complete', {
+            oss_key: tokenData.oss_key,
+            filename: f.file.name,
+            folder_id: parseInt(targetFolderId),
+            file_size: f.file.size,
+            is_restricted: permission === 'private'
+          });
+
+          if (completeError) {
+            throw new Error(completeError.message || '保存文件记录失败');
+          }
+
+          // Success Logic
+          uploadComplete = true; // Signal timer to accelerate
+          await new Promise<void>(resolve => {
+            const checkDone = setInterval(() => {
+              setFiles(prev => {
+                const file = prev.find(p => p.id === f.id);
+                if (file && file.progress >= 100) {
+                  clearInterval(checkDone);
+                  resolve();
+                }
+                return prev;
+              });
+            }, 50);
+          });
+
           clearInterval(progressTimer);
           setFiles(prev => prev.map(file =>
-            file.id === f.id ? { ...file, status: 'error', errorMessage: '网络或系统异常' } : file
+            file.id === f.id ? { ...file, status: 'complete', progress: 100 } : file
+          ));
+
+          if (onUploadSuccess) onUploadSuccess();
+
+        } catch (e: any) {
+          console.error("Upload Error:", e);
+          isError = true;
+          clearInterval(progressTimer);
+
+          let errorMsg = e.message || '网络或系统异常';
+          if (errorMsg.includes('409') || errorMsg.includes('already exists')) {
+            errorMsg = '文件已存在';
+          }
+
+          const isDuplicate = errorMsg === '文件已存在';
+          // Do not toast for every error if it is duplicate
+          if (!isDuplicate) toast.error(errorMsg);
+
+          setFiles(prev => prev.map(file =>
+            file.id === f.id ? { ...file, status: 'error', errorMessage: errorMsg } : file
           ));
         }
       }
