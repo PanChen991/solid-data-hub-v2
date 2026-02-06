@@ -201,8 +201,9 @@ const getParentPermission = (path: BreadcrumbItem[]): ParentPermission | undefin
   // Determine permission based on root space
   const rootId = path[0]?.id || '';
   const rootIdStr = String(rootId);
+  const rootName = path[0]?.name || '';
 
-  if (rootIdStr.startsWith('public') || rootIdStr === '65' || rootIdStr === '124') {
+  if (rootIdStr.startsWith('public') || rootName.includes('公共资源库')) {
     return { type: 'all', label: '全员可见', description: '所有人可访问' };
   } else if (rootIdStr.startsWith('dept') || rootIdStr.startsWith('64')) {
     return { type: 'department', label: '部门可见', description: '本部门成员可访问' };
@@ -1306,8 +1307,22 @@ export function Documents({ initialFolderId }: DocumentsProps) {
   const currentSpaceType = useMemo(() => {
     if (currentPath.length === 0) return undefined;
     const rootId = String(currentPath[0]?.id);
-    if (rootId === 'public' || rootId === '65' || rootId === '124') return 'public';
-    if (rootId === 'departments' || rootId === '64') return 'departments';
+    const rootName = currentPath[0]?.name;
+    // Fix: Robust & Strict Public Space Detection
+    // 1. 'public' string is used by virtual root navigation
+    // 2. '1' is the actual database ID for '00_公共资源库' in the current seed
+    // 3. '00_公共资源库' is the immutable system name for this root folder
+    // We REMOVE partial matches and legacy IDs (65/124) to prevent collisions.
+    const isPublic =
+      rootId === 'public' ||
+      rootId === '1' ||
+      rootName === '00_公共资源库';
+
+    // DEBUG LOG
+    console.log('[DebugSpaceType] Strict Mode', { rootId, rootName, isPublic, currentPath });
+
+    if (isPublic) return 'public';
+    if (rootId === 'departments' || rootId === '64' || rootName?.includes('部门')) return 'departments';
     if (rootId === 'projects') return 'project';
     return undefined;
   }, [currentPath]);
@@ -1792,7 +1807,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
         projectId={currentProjectId ? parseInt(currentProjectId) : undefined}
         projectName={currentProjectName || undefined}
         departmentId={currentDepartmentId}
-        isPublic={currentSpaceType === 'public' || permissionTarget?.id.toString() === 'public' || permissionTarget?.id.toString() === '124'}
+        isPublic={currentSpaceType === 'public' || permissionTarget?.id.toString() === 'public' || permissionTarget?.name?.includes('公共资源库')}
         initialIsRestricted={permissionTarget?.isRestricted} // Pass restriction status
         initialOwnerId={permissionTarget?.owner_id} // Pass owner ID
         initialOwnerName={permissionTarget?.owner_name} // Pass owner name
@@ -2012,7 +2027,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
                               onClick={() => handleOpenPermissions(item)}
                             >
                               <Shield className="w-4 h-4" />
-                              {((item.id as any) === 'public' || (item.id as any).toString() === '124') ? '权限管理' : '协作与成员管理'}
+                              {((item.id as any) === 'public' || item.name.includes('公共资源库')) ? '权限管理' : '协作与成员管理'}
 
                             </DropdownMenuItem>
                           )}
@@ -2135,7 +2150,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
                               onClick={() => handleOpenPermissions(item)}
                             >
                               <Shield className="w-4 h-4" />
-                              {((item.id as any) === 'public' || (item.id as any).toString() === '124') ? '权限管理' : '协作与成员管理'}
+                              {((item.id as any) === 'public' || item.name.includes('公共资源库')) ? '权限管理' : '协作与成员管理'}
 
                             </DropdownMenuItem>
                           )}
