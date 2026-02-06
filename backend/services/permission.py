@@ -203,6 +203,11 @@ class PermissionService:
             return True
         if folder.owner_id == user.id:
             return True
+            
+        # Allow Managers and Editors to write to Public Space
+        # (Assuming Public Space is a shared collaboration area)
+        if user.role in [Role.MANAGER, Role.EDITOR]:
+            return True
         
         return False
 

@@ -8,6 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -446,8 +447,11 @@ export function UploadDialog({ open, onOpenChange, currentPath, currentFolderId,
 
     if (hasFolderStructure) {
       toast.loading('正在构建文件夹目录...', { id: 'folder-creation' });
-      pathIdMap = await ensureDirectoriesExist(pendingFiles.map(f => f.file), currentFolderId);
-      toast.dismiss('folder-creation');
+      try {
+        pathIdMap = await ensureDirectoriesExist(pendingFiles.map(f => f.file), currentFolderId);
+      } finally {
+        toast.dismiss('folder-creation');
+      }
     }
 
     // Process files
@@ -613,6 +617,12 @@ export function UploadDialog({ open, onOpenChange, currentPath, currentFolderId,
         "bg-card/95 backdrop-blur-xl border-border/50 p-0 overflow-hidden transition-all duration-300 flex flex-col",
         permission === 'part' ? "sm:max-w-4xl sm:h-[680px] sm:max-h-[90vh]" : "sm:max-w-[500px] sm:max-h-[min(800px,90vh)]"
       )}>
+        <DialogHeader className="sr-only">
+          <DialogTitle>上传文件/文件夹</DialogTitle>
+          <DialogDescription>
+            从本地选择文件或文件夹上传到当前目录，并配置访问权限。
+          </DialogDescription>
+        </DialogHeader>
         <div className="flex flex-col lg:flex-row h-full min-h-0">
           {/* Left Panel: Upload Info & Actions */}
           <div className={cn(

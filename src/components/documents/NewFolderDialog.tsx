@@ -236,6 +236,12 @@ export function NewFolderDialog({
         "bg-card/95 backdrop-blur-xl border-border/50 p-0 overflow-hidden transition-all duration-300",
         (permission === 'part' || showAdminSelection) ? "sm:max-w-4xl" : "sm:max-w-[480px]"
       )}>
+        <DialogHeader className="sr-only">
+          <DialogTitle>新建文件夹</DialogTitle>
+          <DialogDescription>
+            在当前目录下创建一个新文件夹，并为其设置访问权限。
+          </DialogDescription>
+        </DialogHeader>
         <div className="flex flex-col lg:flex-row h-full">
           {/* Left Panel: Basic Info */}
           <div className={cn(
@@ -526,6 +532,6 @@ export function NewFolderDialog({
           )}
         </div>
       </DialogContent>
-    </Dialog>
+    </Dialog >
   );
 }

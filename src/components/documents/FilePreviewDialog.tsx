@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 // import { FolderItem } from '@/data/mockData'; // Removed to avoid conflict
 
@@ -121,6 +124,10 @@ export function FilePreviewDialog({ open, onOpenChange, file }: FilePreviewDialo
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[900px] h-[80vh] flex flex-col p-0 gap-0 bg-card/95 backdrop-blur-xl border-border/50">
+        <DialogHeader className="sr-only">
+          <DialogTitle>文件预览 - {file.name}</DialogTitle>
+          <DialogDescription>预览文件内容并提供下载选项。</DialogDescription>
+        </DialogHeader>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
           <div className="flex items-center gap-3">
