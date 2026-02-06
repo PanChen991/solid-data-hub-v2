@@ -119,6 +119,9 @@ class PermissionService:
 
         # Space Logic for role
         if self.check_permission(user, resource, 'write'):
+            # NEW: Escalate Manager to Admin if in Department Space
+            if user.role == Role.MANAGER and folder.space_type == SpaceType.DEPARTMENT:
+                return 'admin'
             return 'editor'
             
         return 'viewer'
@@ -193,6 +196,8 @@ class PermissionService:
             return action == 'read'
             
         return False
+            
+        return False
 
     def _check_public_permission(self, user: User, folder: Folder, action: str) -> bool:
         if action == 'read':
@@ -219,7 +224,7 @@ class PermissionService:
         if user.role == Role.SUPER_ADMIN:
             return True
 
-        # Special Case: Root of Department Space (01_职能部门空间)
+        # Special Case: Root of Department Space (01_部门专属空间)
         # ID 2 is the root. Or check if it has no parent and is Dept Space.
         # Allow Read for all internal users to navigate.
         if folder.parent_id is None and folder.space_type == SpaceType.DEPARTMENT:

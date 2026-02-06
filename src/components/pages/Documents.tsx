@@ -151,7 +151,7 @@ const getRootIcon = (item: FolderItem) => {
   if ((item as any).customIcon === 'globe') return Globe;
   if ((item as any).customIcon === 'home') return Building2; // Use Building2 or a Home icon if imported
   if (item.id === 'public' || item.name.includes('公共资源库')) return Globe;
-  if (item.id === 'departments' || item.name.includes('职能部门')) return Building2;
+  if (item.id === 'departments' || item.name.includes('部门专属空间')) return Building2;
   if (item.id === 'projects' || item.name.includes('项目')) return Users;
   if (item.id === 'projects' || item.name.includes('项目')) return Users;
   if (item.id === 'shared' || item.name.includes('与我共享')) return Share2; // Use Share2 for shared folder
@@ -930,10 +930,11 @@ export function Documents({ initialFolderId }: DocumentsProps) {
               name: f.name,
               type: 'folder' as const,
               isLocked: f.is_locked,
-              isRestricted: f.is_restricted, // Add missing prop
+              isRestricted: f.is_restricted,
+              isProtected: currentSpaceType === 'departments' && f.name.includes('公共区'), // Propagate protection logic
               author: f.owner_name || 'System',
-              ownerId: f.owner_id, // Add missing prop
-              ownerName: f.owner_name, // Add missing prop
+              ownerId: f.owner_id,
+              ownerName: f.owner_name,
               role: (f.role || 'viewer') as 'viewer' | 'editor' | 'admin',
               projectId: f.project_id,
               children: [],
@@ -1078,7 +1079,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
     // If user clicks "01_Functions" (departments root) and has a department, 
     // we want to shortcut them to their Level 2 Department (e.g., Digital Intel R&D),
     // skipping the intermediate "America R&D" step, BUT enabling breadcrumbs to go back.
-    if ((item.id === 'departments' || item.name.includes('职能部门')) && user?.department_id && user?.role?.toUpperCase() !== 'SUPER_ADMIN') {
+    if ((item.id === 'departments' || item.name.includes('部门专属空间')) && user?.department_id && user?.role?.toUpperCase() !== 'SUPER_ADMIN') {
       try {
         const { data: allDepts } = await getDepartments();
         if (allDepts && allDepts.length > 0) {
@@ -1871,226 +1872,70 @@ export function Documents({ initialFolderId }: DocumentsProps) {
 
 
       {/* Content Area */}
-      {
-        currentItems.length === 0 && !(currentSpaceType === 'project' && currentPath.length === 1 && currentPath[0].id === 'projects') ? (
-          /* Empty State with Drag & Drop Zone */
-          <div
-            className={cn(
-              'flex flex-col items-center justify-center py-20 border-2 border-dashed rounded-2xl transition-all duration-200 cursor-pointer',
-              isDragOver
-                ? 'border-primary bg-primary/5'
-                : 'border-border/60 hover:border-border hover:bg-accent/5'
-            )}
-            onClick={() => setUploadDialogOpen(true)}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <div className={cn(
-              'w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-colors',
-              isDragOver ? 'bg-primary/10' : 'bg-accent/50'
-            )}>
-              <Upload className={cn(
-                'w-8 h-8 transition-colors',
-                isDragOver ? 'text-primary' : 'text-muted-foreground'
-              )} />
-            </div>
-            <p className="text-foreground font-medium mb-1">拖拽文件/文件夹至此</p>
-            <p className="text-muted-foreground text-sm">或 点击上传/上传文件夹</p>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 animate-pulse">
+          <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4" />
+          <p className="text-muted-foreground text-sm animate-pulse">正在加载内容...</p>
+        </div>
+      ) : currentItems.length === 0 && !(currentSpaceType === 'project' && currentPath.length === 1 && currentPath[0].id === 'projects') ? (
+        /* Empty State with Drag & Drop Zone */
+        <div
+          className={cn(
+            'flex flex-col items-center justify-center py-20 border-2 border-dashed rounded-2xl transition-all duration-200 cursor-pointer',
+            isDragOver
+              ? 'border-primary bg-primary/5'
+              : 'border-border/60 hover:border-border hover:bg-accent/5'
+          )}
+          onClick={() => setUploadDialogOpen(true)}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <div className={cn(
+            'w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-colors',
+            isDragOver ? 'bg-primary/10' : 'bg-accent/50'
+          )}>
+            <Upload className={cn(
+              'w-8 h-8 transition-colors',
+              isDragOver ? 'text-primary' : 'text-muted-foreground'
+            )} />
           </div>
-        ) : currentItems.length === 0 && (currentSpaceType === 'project' && currentPath.length === 1 && currentPath[0].id === 'projects') ? (
-          /* Empty State - Project Root */
-          <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-border/40 rounded-2xl bg-muted/10">
-            <div className="w-16 h-16 rounded-2xl bg-accent/50 flex items-center justify-center mb-4 text-muted-foreground">
-              <FolderPlus className="w-8 h-8" />
-            </div>
-            <p className="text-foreground font-medium mb-2">暂无项目</p>
+          <p className="text-foreground font-medium mb-1">拖拽文件/文件夹至此</p>
+          <p className="text-muted-foreground text-sm">或 点击上传/上传文件夹</p>
+        </div>
+      ) : currentItems.length === 0 && (currentSpaceType === 'project' && currentPath.length === 1 && currentPath[0].id === 'projects') ? (
+        /* Empty State - Project Root */
+        <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-border/40 rounded-2xl bg-muted/10">
+          <div className="w-16 h-16 rounded-2xl bg-accent/50 flex items-center justify-center mb-4 text-muted-foreground">
+            <FolderPlus className="w-8 h-8" />
           </div>
-        ) : effectiveViewMode === 'list' && !isRootLevel ? (
-          /* List View - Table Style */
-          <div
-            className={cn(
-              'bg-card/60 backdrop-blur-xl rounded-xl border border-border/40 overflow-hidden',
-              isDragOver && 'ring-2 ring-primary ring-offset-2'
-            )}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            {/* Table Header */}
-            <div className="grid grid-cols-[1fr_140px_80px_100px_48px] gap-4 px-4 py-3 border-b border-border/30 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              <div>名称</div>
-              <div>修改日期</div>
-              <div>大小</div>
-              <div>上传者</div>
-              <div className="text-center">操作</div>
-            </div>
-
-            {/* Table Body */}
-            <div className="divide-y divide-border/20">
-              {displayItems.map((item) => {
-                const isFolder = item.type === 'folder';
-                const { icon: Icon, bgColor, iconColor } = getFileIcon(item.type, item.isLocked);
-                const isEditable = user?.role?.toLowerCase() === 'super_admin' ||
-                  (item.ownerId === user?.id) ||
-                  (item.role === 'editor' || item.role === 'admin');
-                const canManageMembers = user?.role?.toLowerCase() === 'super_admin' ||
-                  (item.ownerId === user?.id) ||
-                  (item.role === 'admin');
-
-                // Normalize IDs for comparison to handle string/number and potential prefixes
-                const rawHighlightId = highlightId?.replace(/^(doc-|file-|folder-)/, '');
-                const rawItemId = item.id.toString().replace(/^(doc-|file-|folder-)/, '');
-                const isHighlighted = highlightId && isHighlightActive && (rawItemId === rawHighlightId);
-
-                return (
-                  <div
-                    key={item.id}
-                    id={`file-row-${item.id}`} // Add ID for scrolling
-                    onClick={() => isFolder ? navigateToFolder(item) : handlePreviewFile(item)}
-                    className={cn(
-                      'grid grid-cols-[1fr_140px_80px_100px_48px] gap-4 px-4 py-3 items-center transition-all duration-500 cursor-pointer', // slower transition for fade
-                      'hover:bg-accent/30',
-                      item.isLocked && 'opacity-60',
-                      isHighlighted && 'bg-yellow-100/80 dark:bg-yellow-900/40 ring-2 ring-yellow-500/50 z-10 scale-[1.005] shadow-sm' // Highlight styles (Yellow flash)
-                    )}
-                  >
-                    {/* Name */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={cn(
-                        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
-                        bgColor
-                      )}>
-                        <Icon className={cn('w-4 h-4', iconColor)} />
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className={cn(
-                          'text-sm font-medium text-foreground truncate',
-                          isFolder && !item.isLocked && 'hover:text-primary'
-                        )}>
-                          {item.name}
-                        </span>
-                        {/* Search Path Breadcrumbs */}
-                        {item.ancestors && item.ancestors.length > 0 && (
-                          <span className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
-                            {item.ancestors.map(a => a.name).join(' / ')}
-                          </span>
-                        )}
-                      </div>
-                      {item.isLocked && (
-                        <span className="text-xs text-red-500 flex-shrink-0">需要权限</span>
-                      )}
-                    </div>
-
-                    {/* Date Modified */}
-                    <div className="text-sm text-muted-foreground">
-                      {item.updatedAgo || '-'}
-                    </div>
-
-                    {/* Size */}
-                    <div className="text-sm text-muted-foreground">
-                      {item.size || '-'}
-                    </div>
-
-                    {/* Author */}
-                    <div className="text-sm text-muted-foreground truncate">
-                      {item.author || '-'}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="p-1.5 rounded-md hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          {/* Project Member Management */}
-                          {(item as any).projectId && canManageMembers && (
-                            <DropdownMenuItem
-                              className="gap-2 cursor-pointer"
-                              onClick={() => setProjectMembersDialogState({
-                                isOpen: true,
-                                projectId: (item as any).projectId,
-                                projectTitle: item.name
-                              })}
-                            >
-                              <Users className="w-4 h-4" />
-                              成员管理
-                            </DropdownMenuItem>
-                          )}
-
-                          {canManageMembers && !item.isProtected && !isNaN(Number(item.id.toString().replace(/^(doc-|folder-|file-)/, ''))) && !(item as any).projectId && currentSpaceType !== 'public' && currentSpaceType !== 'project' && (
-                            <DropdownMenuItem
-                              className="gap-2 cursor-pointer"
-                              onClick={() => handleOpenPermissions(item)}
-                            >
-                              <Shield className="w-4 h-4" />
-                              {((item.id as any) === 'public' || item.name.includes('公共资源库')) ? '权限管理' : '协作与成员管理'}
-
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            className="gap-2 cursor-pointer"
-                            onClick={() => {
-                              const link = `${window.location.origin}/share/${item.type}/${item.id}`;
-                              copyToClipboard(link);
-                            }}
-                          >
-                            <Share2 className="w-4 h-4 ml-[0.5px]" />
-                            分享链接
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="gap-2 cursor-pointer"
-                            onClick={() => handleDownloadFile(item)}
-                          >
-                            <Download className="w-4 h-4" />
-                            下载
-                          </DropdownMenuItem>
-                          {isEditable && !item.isProtected && !isNaN(Number(item.id.toString().replace(/^(doc-|folder-|file-)/, ''))) && (
-                            <>
-                              <DropdownMenuItem
-                                className="gap-2 cursor-pointer"
-                                onClick={() => handleOpenRename(item)}
-                              >
-                                <Pencil className="w-4 h-4" />
-                                重命名
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                                onClick={() => handleDeleteItem(item)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                删除
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          <p className="text-foreground font-medium mb-2">暂无项目</p>
+        </div>
+      ) : effectiveViewMode === 'list' && !isRootLevel ? (
+        /* List View - Table Style */
+        <div
+          className={cn(
+            'bg-card/60 backdrop-blur-xl rounded-xl border border-border/40 overflow-hidden',
+            isDragOver && 'ring-2 ring-primary ring-offset-2'
+          )}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {/* Table Header */}
+          <div className="grid grid-cols-[1fr_140px_80px_100px_48px] gap-4 px-4 py-3 border-b border-border/30 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <div>名称</div>
+            <div>修改日期</div>
+            <div>大小</div>
+            <div>上传者</div>
+            <div className="text-center">操作</div>
           </div>
-        ) : (
-          /* Grid View */
-          <div
-            className={cn(
-              'grid gap-3',
-              isRootLevel ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
-              isDragOver && isLevel3 && 'ring-2 ring-primary ring-offset-4 rounded-2xl'
-            )}
-            onDragOver={isLevel3 ? handleDragOver : undefined}
-            onDragLeave={isLevel3 ? handleDragLeave : undefined}
-            onDrop={isLevel3 ? handleDrop : undefined}
-          >
-            {currentItems.map((item) => {
+
+          {/* Table Body */}
+          <div className="divide-y divide-border/20">
+            {displayItems.map((item) => {
               const isFolder = item.type === 'folder';
-              const isRoot = isRootLevel;
               const { icon: Icon, bgColor, iconColor } = getFileIcon(item.type, item.isLocked);
-              const RootIcon = isRoot ? getRootIcon(item) : Icon;
               const isEditable = user?.role?.toLowerCase() === 'super_admin' ||
                 (item.ownerId === user?.id) ||
                 (item.role === 'editor' || item.role === 'admin');
@@ -2098,7 +1943,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
                 (item.ownerId === user?.id) ||
                 (item.role === 'admin');
 
-              // Normalize IDs for comparison
+              // Normalize IDs for comparison to handle string/number and potential prefixes
               const rawHighlightId = highlightId?.replace(/^(doc-|file-|folder-)/, '');
               const rawItemId = item.id.toString().replace(/^(doc-|file-|folder-)/, '');
               const isHighlighted = highlightId && isHighlightActive && (rawItemId === rawHighlightId);
@@ -2106,201 +1951,361 @@ export function Documents({ initialFolderId }: DocumentsProps) {
               return (
                 <div
                   key={item.id}
-                  id={`file-row-${item.id}`}
+                  id={`file-row-${item.id}`} // Add ID for scrolling
+                  onClick={() => isFolder ? navigateToFolder(item) : handlePreviewFile(item)}
                   className={cn(
-                    'group relative text-left transition-all duration-200',
-                    isRoot
-                      ? 'bg-card rounded-2xl p-6 border border-border/40 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.08)] hover:-translate-y-1 hover:border-border/60'
-                      : 'bg-card rounded-xl p-4 border border-border/30 hover:bg-accent/30 hover:border-border/50',
-                    item.isLocked && 'opacity-60 cursor-not-allowed',
-                    isHighlighted && 'bg-yellow-100/80 dark:bg-yellow-900/40 ring-2 ring-yellow-500/50 z-10 scale-[1.05] shadow-md'
+                    'grid grid-cols-[1fr_140px_80px_100px_48px] gap-4 px-4 py-3 items-center transition-all duration-500 cursor-pointer', // slower transition for fade
+                    'hover:bg-accent/30',
+                    item.isLocked && 'opacity-60',
+                    isHighlighted && 'bg-yellow-100/80 dark:bg-yellow-900/40 ring-2 ring-yellow-500/50 z-10 scale-[1.005] shadow-sm' // Highlight styles (Yellow flash)
                   )}
                 >
-                  {/* Action Menu - Top Right */}
-                  {!item.isLocked && (isRoot ? canManageMembers : true) && (
-                    <div
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="p-1.5 rounded-md bg-background/80 hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground shadow-sm">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          {/* Project Member Management */}
-                          {(item as any).projectId && canManageMembers && (
-                            <DropdownMenuItem
-                              className="gap-2 cursor-pointer"
-                              onClick={() => setProjectMembersDialogState({
-                                isOpen: true,
-                                projectId: (item as any).projectId,
-                                projectTitle: item.name
-                              })}
-                            >
-                              <Users className="w-4 h-4" />
-                              成员管理
-                            </DropdownMenuItem>
-                          )}
-
-                          {canManageMembers && !item.isProtected && !isNaN(Number(item.id.toString().replace(/^(doc-|folder-|file-)/, ''))) && !(item as any).projectId && currentSpaceType !== 'public' && currentSpaceType !== 'project' && (
-                            <DropdownMenuItem
-                              className="gap-2 cursor-pointer"
-                              onClick={() => handleOpenPermissions(item)}
-                            >
-                              <Shield className="w-4 h-4" />
-                              {((item.id as any) === 'public' || item.name.includes('公共资源库')) ? '权限管理' : '协作与成员管理'}
-
-                            </DropdownMenuItem>
-                          )}
-
-                          {!isRoot && (
-                            <>
-                              <DropdownMenuItem
-                                className="gap-2 cursor-pointer"
-                                onClick={() => {
-                                  const link = `${window.location.origin}/share/${item.type}/${item.id}`;
-                                  copyToClipboard(link);
-                                }}
-                              >
-                                <Share2 className="w-4 h-4 ml-[0.5px]" />
-                                分享链接
-                              </DropdownMenuItem>
-                              {isEditable && !isNaN(Number(item.id.toString().replace(/^(doc-|folder-|file-)/, ''))) && (
-                                <DropdownMenuItem
-                                  className="gap-2 cursor-pointer"
-                                  onClick={() => handleOpenRename(item)}
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                  重命名
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem
-                                className="gap-2 cursor-pointer"
-                                onClick={() => handleDownloadFile(item)}
-                              >
-                                <Download className="w-4 h-4" />
-                                下载
-                              </DropdownMenuItem>
-                              {isEditable && !isNaN(Number(item.id.toString().replace(/^(doc-|folder-|file-)/, ''))) && (
-                                <DropdownMenuItem
-                                  className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                                  onClick={() => handleDeleteItem(item)}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  删除
-                                </DropdownMenuItem>
-                              )}
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                  {/* Name */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={cn(
+                      'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                      bgColor
+                    )}>
+                      <Icon className={cn('w-4 h-4', iconColor)} />
                     </div>
-                  )}
-
-                  {/* Clickable Content */}
-                  <button
-                    onClick={() => isFolder ? navigateToFolder(item) : handlePreviewFile(item)}
-                    disabled={item.isLocked}
-                    className="w-full text-left"
-                  >
-                    {isRoot ? (
-                      // Root level cards - New Design
-                      <div className="flex flex-col h-full min-h-[120px]">
-                        {/* Top: Header Row (Icon + Title + Badge) */}
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-4">
-                            <div className={cn(
-                              'w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105',
-                              item.id === 'public' && 'bg-blue-50 text-blue-600',
-                              item.id === 'departments' && 'bg-amber-50 text-amber-600',
-                              item.id === 'projects' && 'bg-green-50 text-green-600',
-                              item.id === 'shared' && 'bg-rose-50 text-rose-600',
-                              (item as any).bgColor
-                            )}>
-                              <RootIcon className={cn(
-                                'w-6 h-6',
-                                (item as any).iconColor
-                              )} />
-                            </div>
-
-                            <h3 className={cn(
-                              "text-[17px] font-semibold tracking-tight transition-colors",
-                              item.id === 'public' && 'text-blue-900',
-                              item.id === 'departments' && 'text-amber-900',
-                              item.id === 'projects' && 'text-green-900',
-                              item.id === 'shared' && 'text-rose-900',
-                              !['public', 'departments', 'projects', 'shared'].includes(item.id.toString()) && 'text-foreground'
-                            )}>
-                              {item.name}
-                            </h3>
-                          </div>
-
-                          {/* Badge */}
-                          <span className={cn(
-                            'text-[10px] font-medium px-2 py-0.5 rounded-full bg-opacity-60 whitespace-nowrap',
-                            (item.id === 'public' || item.name.includes('公共资源库')) && 'bg-blue-100 text-blue-700',
-                            (item.id === 'departments' || item.name.includes('部门')) && 'bg-amber-100 text-amber-700',
-                            (item.id === 'projects' || item.name.includes('项目')) && 'bg-green-100 text-green-700',
-                            (item.id === 'shared' || item.name.includes('与我共享')) && 'bg-rose-100 text-rose-700',
-                            (!['public', 'departments', 'projects', 'shared'].includes(item.id.toString()) && !item.name.includes('公共资源库') && !item.name.includes('部门') && !item.name.includes('项目') && !item.name.includes('与我共享')) && 'bg-gray-100 text-gray-500'
-                          )}>
-                            {item.id === 'public' && '全员可见'}
-                            {item.id === 'departments' && '部门隔离'}
-                            {item.id === 'projects' && '跨部门'}
-                            {item.id === 'shared' && '跨部门'}
-                            {(!['public', 'departments', 'projects', 'shared'].includes(item.id.toString())) && '全员可见'}
-                          </span>
-                        </div>
-
-                        <div className="flex-1 mt-4 pl-1">
-                          <p className="text-[13px] text-muted-foreground/80 leading-7 line-clamp-2 font-normal">
-                            {(item.id === 'public' || item.name.includes('公共资源库')) && '内部公开的政策规范、技术标准与通用模板'}
-                            {(item.id === 'departments' || item.name.includes('部门')) && '各业务部门的内部专属工作区'}
-                            {(item.id === 'projects' || item.name.includes('项目')) && '跨部门项目组、临时专项小组工作区'}
-                            {(item.id === 'shared' || item.name.includes('与我共享')) && '协作文档（仅显示添加协同人方式的文件/文件夹）'}
-                            {(!['public', 'departments', 'projects', 'shared'].includes(item.id.toString()) && !item.name.includes('公共资源库') && !item.name.includes('部门') && !item.name.includes('项目') && !item.name.includes('与我共享')) && '文件夹包含归档和协作内容'}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      // Normal Grid Item
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                          bgColor
-                        )}>
-                          <Icon className={cn('w-5 h-5', iconColor)} />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className={cn(
-                            'font-medium text-foreground truncate transition-colors',
-                            isFolder && !item.isLocked && 'group-hover:text-primary'
-                          )}>
-                            {item.name}
-                          </span>
-                          {item.updatedAgo && (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                              <Clock className="w-3 h-3" />
-                              {item.updatedAgo}
-                            </span>
-                          )}
-                          {item.author && (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                              <User className="w-3 h-3" />
-                              {item.author}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className={cn(
+                        'text-sm font-medium text-foreground truncate',
+                        isFolder && !item.isLocked && 'hover:text-primary'
+                      )}>
+                        {item.name}
+                      </span>
+                      {/* Search Path Breadcrumbs */}
+                      {item.ancestors && item.ancestors.length > 0 && (
+                        <span className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
+                          {item.ancestors.map(a => a.name).join(' / ')}
+                        </span>
+                      )}
+                    </div>
+                    {item.isLocked && (
+                      <span className="text-xs text-red-500 flex-shrink-0">需要权限</span>
                     )}
-                  </button>
+                  </div>
+
+                  {/* Date Modified */}
+                  <div className="text-sm text-muted-foreground">
+                    {item.updatedAgo || '-'}
+                  </div>
+
+                  {/* Size */}
+                  <div className="text-sm text-muted-foreground">
+                    {item.size || '-'}
+                  </div>
+
+                  {/* Author */}
+                  <div className="text-sm text-muted-foreground truncate">
+                    {item.author || '-'}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="p-1.5 rounded-md hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40">
+                        {/* Project Member Management */}
+                        {(item as any).projectId && canManageMembers && (
+                          <DropdownMenuItem
+                            className="gap-2 cursor-pointer"
+                            onClick={() => setProjectMembersDialogState({
+                              isOpen: true,
+                              projectId: (item as any).projectId,
+                              projectTitle: item.name
+                            })}
+                          >
+                            <Users className="w-4 h-4" />
+                            成员管理
+                          </DropdownMenuItem>
+                        )}
+
+                        {canManageMembers && !isNaN(Number(item.id.toString().replace(/^(doc-|folder-|file-)/, ''))) && !(item as any).projectId && (currentSpaceType === 'departments' || (!item.isProtected && currentSpaceType !== 'public' && currentSpaceType !== 'project')) && (
+                          <DropdownMenuItem
+                            className="gap-2 cursor-pointer"
+                            onClick={() => handleOpenPermissions(item)}
+                          >
+                            <Shield className="w-4 h-4" />
+                            {((item.id as any) === 'public' || item.name.includes('公共资源库')) ? '权限管理' : '协作与成员管理'}
+
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          className="gap-2 cursor-pointer"
+                          onClick={() => {
+                            const link = `${window.location.origin}/share/${item.type}/${item.id}`;
+                            copyToClipboard(link);
+                          }}
+                        >
+                          <Share2 className="w-4 h-4 ml-[0.5px]" />
+                          分享链接
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="gap-2 cursor-pointer"
+                          onClick={() => handleDownloadFile(item)}
+                        >
+                          <Download className="w-4 h-4" />
+                          下载
+                        </DropdownMenuItem>
+                        {isEditable && !item.isProtected && !isNaN(Number(item.id.toString().replace(/^(doc-|folder-|file-)/, ''))) && (
+                          <>
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer"
+                              onClick={() => handleOpenRename(item)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                              重命名
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                              onClick={() => handleDeleteItem(item)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              删除
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               );
             })}
-          </div >
-        )
+          </div>
+        </div>
+      ) : (
+        /* Grid View */
+        <div
+          className={cn(
+            'grid gap-3',
+            isRootLevel ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+            isDragOver && isLevel3 && 'ring-2 ring-primary ring-offset-4 rounded-2xl'
+          )}
+          onDragOver={isLevel3 ? handleDragOver : undefined}
+          onDragLeave={isLevel3 ? handleDragLeave : undefined}
+          onDrop={isLevel3 ? handleDrop : undefined}
+        >
+          {currentItems.map((item) => {
+            const isFolder = item.type === 'folder';
+            const isRoot = isRootLevel;
+            const { icon: Icon, bgColor, iconColor } = getFileIcon(item.type, item.isLocked);
+            const RootIcon = isRoot ? getRootIcon(item) : Icon;
+            const isEditable = user?.role?.toLowerCase() === 'super_admin' ||
+              (item.ownerId === user?.id) ||
+              (item.role === 'editor' || item.role === 'admin');
+            const canManageMembers = user?.role?.toLowerCase() === 'super_admin' ||
+              (item.ownerId === user?.id) ||
+              (item.role === 'admin');
+
+            // Normalize IDs for comparison
+            const rawHighlightId = highlightId?.replace(/^(doc-|file-|folder-)/, '');
+            const rawItemId = item.id.toString().replace(/^(doc-|file-|folder-)/, '');
+            const isHighlighted = highlightId && isHighlightActive && (rawItemId === rawHighlightId);
+
+            return (
+              <div
+                key={item.id}
+                id={`file-row-${item.id}`}
+                className={cn(
+                  'group relative text-left transition-all duration-200',
+                  isRoot
+                    ? 'bg-card rounded-2xl p-6 border border-border/40 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.08)] hover:-translate-y-1 hover:border-border/60'
+                    : 'bg-card rounded-xl p-4 border border-border/30 hover:bg-accent/30 hover:border-border/50',
+                  item.isLocked && 'opacity-60 cursor-not-allowed',
+                  isHighlighted && 'bg-yellow-100/80 dark:bg-yellow-900/40 ring-2 ring-yellow-500/50 z-10 scale-[1.05] shadow-md'
+                )}
+              >
+                {/* Action Menu - Top Right */}
+                {!item.isLocked && (isRoot ? canManageMembers : true) && (
+                  <div
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="p-1.5 rounded-md bg-background/80 hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground shadow-sm">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40">
+                        {/* Project Member Management */}
+                        {(item as any).projectId && canManageMembers && (
+                          <DropdownMenuItem
+                            className="gap-2 cursor-pointer"
+                            onClick={() => setProjectMembersDialogState({
+                              isOpen: true,
+                              projectId: (item as any).projectId,
+                              projectTitle: item.name
+                            })}
+                          >
+                            <Users className="w-4 h-4" />
+                            成员管理
+                          </DropdownMenuItem>
+                        )}
+
+                        {canManageMembers && !isNaN(Number(item.id.toString().replace(/^(doc-|folder-|file-)/, ''))) && !(item as any).projectId && (currentSpaceType === 'departments' || (!item.isProtected && currentSpaceType !== 'public' && currentSpaceType !== 'project')) && (
+                          <DropdownMenuItem
+                            className="gap-2 cursor-pointer"
+                            onClick={() => handleOpenPermissions(item)}
+                          >
+                            <Shield className="w-4 h-4" />
+                            {((item.id as any) === 'public' || item.name.includes('公共资源库')) ? '权限管理' : '协作与成员管理'}
+
+                          </DropdownMenuItem>
+                        )}
+
+                        {!isRoot && (
+                          <>
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer"
+                              onClick={() => {
+                                const link = `${window.location.origin}/share/${item.type}/${item.id}`;
+                                copyToClipboard(link);
+                              }}
+                            >
+                              <Share2 className="w-4 h-4 ml-[0.5px]" />
+                              分享链接
+                            </DropdownMenuItem>
+                            {isEditable && !isNaN(Number(item.id.toString().replace(/^(doc-|folder-|file-)/, ''))) && (
+                              <DropdownMenuItem
+                                className="gap-2 cursor-pointer"
+                                onClick={() => handleOpenRename(item)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                                重命名
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer"
+                              onClick={() => handleDownloadFile(item)}
+                            >
+                              <Download className="w-4 h-4" />
+                              下载
+                            </DropdownMenuItem>
+                            {isEditable && !isNaN(Number(item.id.toString().replace(/^(doc-|folder-|file-)/, ''))) && (
+                              <DropdownMenuItem
+                                className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                                onClick={() => handleDeleteItem(item)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                删除
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
+
+                {/* Clickable Content */}
+                <button
+                  onClick={() => isFolder ? navigateToFolder(item) : handlePreviewFile(item)}
+                  disabled={item.isLocked}
+                  className="w-full text-left"
+                >
+                  {isRoot ? (
+                    // Root level cards - New Design
+                    <div className="flex flex-col h-full min-h-[120px]">
+                      {/* Top: Header Row (Icon + Title + Badge) */}
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-4">
+                          <div className={cn(
+                            'w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105',
+                            item.id === 'public' && 'bg-blue-50 text-blue-600',
+                            item.id === 'departments' && 'bg-amber-50 text-amber-600',
+                            item.id === 'projects' && 'bg-green-50 text-green-600',
+                            item.id === 'shared' && 'bg-rose-50 text-rose-600',
+                            (item as any).bgColor
+                          )}>
+                            <RootIcon className={cn(
+                              'w-6 h-6',
+                              (item as any).iconColor
+                            )} />
+                          </div>
+
+                          <h3 className={cn(
+                            "text-[17px] font-semibold tracking-tight transition-colors",
+                            item.id === 'public' && 'text-blue-900',
+                            item.id === 'departments' && 'text-amber-900',
+                            item.id === 'projects' && 'text-green-900',
+                            item.id === 'shared' && 'text-rose-900',
+                            !['public', 'departments', 'projects', 'shared'].includes(item.id.toString()) && 'text-foreground'
+                          )}>
+                            {item.name}
+                          </h3>
+                        </div>
+
+                        {/* Badge */}
+                        <span className={cn(
+                          'text-[10px] font-medium px-2 py-0.5 rounded-full bg-opacity-60 whitespace-nowrap',
+                          (item.id === 'public' || item.name.includes('公共资源库')) && 'bg-blue-100 text-blue-700',
+                          (item.id === 'departments' || item.name.includes('部门')) && 'bg-amber-100 text-amber-700',
+                          (item.id === 'projects' || item.name.includes('项目')) && 'bg-green-100 text-green-700',
+                          (item.id === 'shared' || item.name.includes('与我共享')) && 'bg-rose-100 text-rose-700',
+                          (!['public', 'departments', 'projects', 'shared'].includes(item.id.toString()) && !item.name.includes('公共资源库') && !item.name.includes('部门') && !item.name.includes('项目') && !item.name.includes('与我共享')) && 'bg-gray-100 text-gray-500'
+                        )}>
+                          {item.id === 'public' && '全员可见'}
+                          {item.id === 'departments' && '部门隔离'}
+                          {item.id === 'projects' && '跨部门'}
+                          {item.id === 'shared' && '跨部门'}
+                          {(!['public', 'departments', 'projects', 'shared'].includes(item.id.toString())) && '全员可见'}
+                        </span>
+                      </div>
+
+                      <div className="flex-1 mt-4 pl-1">
+                        <p className="text-[13px] text-muted-foreground/80 leading-7 line-clamp-2 font-normal">
+                          {(item.id === 'public' || item.name.includes('公共资源库')) && '内部公开的政策规范、技术标准与通用模板'}
+                          {(item.id === 'departments' || item.name.includes('部门')) && '各业务部门的内部专属工作区'}
+                          {(item.id === 'projects' || item.name.includes('项目')) && '跨部门项目组、临时专项小组工作区'}
+                          {(item.id === 'shared' || item.name.includes('与我共享')) && '协作文档（仅显示添加协同人方式的文件/文件夹）'}
+                          {(!['public', 'departments', 'projects', 'shared'].includes(item.id.toString()) && !item.name.includes('公共资源库') && !item.name.includes('部门') && !item.name.includes('项目') && !item.name.includes('与我共享')) && '文件夹包含归档和协作内容'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    // Normal Grid Item
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                        bgColor
+                      )}>
+                        <Icon className={cn('w-5 h-5', iconColor)} />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className={cn(
+                          'font-medium text-foreground truncate transition-colors',
+                          isFolder && !item.isLocked && 'group-hover:text-primary'
+                        )}>
+                          {item.name}
+                        </span>
+                        {item.updatedAgo && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                            <Clock className="w-3 h-3" />
+                            {item.updatedAgo}
+                          </span>
+                        )}
+                        {item.author && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                            <User className="w-3 h-3" />
+                            {item.author}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div >
+      )
       }
     </div >
   );
