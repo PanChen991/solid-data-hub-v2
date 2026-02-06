@@ -444,7 +444,7 @@ async def get_document_content(
     
     
     # If not local, try OSS Redirection
-    url = StorageService.get_presigned_url(doc.oss_key)
+    url = StorageService.get_presigned_url(doc.oss_key, download_name=doc.name)
     return RedirectResponse(url)
 
 @app.get("/folders/{folder_id}/zip")
@@ -488,22 +488,29 @@ async def get_folder_zip(
             files = session.exec(select(Document).where(Document.folder_id == folder_obj.id, Document.is_deleted == False)).all()
             for file in files:
                 # ROBUST PATH RESOLUTION:
-                # Handle cases where oss_key might unintentionally start with UPLOAD_DIR
-                if file.oss_key.startswith(f"{UPLOAD_DIR}/"):
-                    local_path = file.oss_key
-                else:
-                    local_path = os.path.join(UPLOAD_DIR, file.oss_key)
+                # 1. Try Local File (Legacy or specific dev setup)
+                # The file system currently has double nesting: uploads/uploads/2026...
+                local_path = os.path.join(UPLOAD_DIR, file.oss_key)
                 
+                # Fallback: If strict join fails, maybe oss_key is already the full path relative to CWD?
+                if not os.path.exists(local_path) and os.path.exists(file.oss_key):
+                    local_path = file.oss_key
+
                 archive_name = f"{current_path}/{file.name}"
                 
                 if os.path.exists(local_path):
+                    # Found locally, write to ZIP
                     zf.write(local_path, arcname=archive_name)
                 else:
-                    # Log missing file but DO NOT rename it to .txt
-                    print(f"[Warning] File missing during zip: {local_path}")
-                    # Keep original extension for the entry if we keep it, or just skip.
-                    # Skipping is cleaner than a broken txt file.
-                    pass
+                    # 2. Try OSS (Standard Production)
+                    # If not found locally, fetch stream from OSS
+                    file_content = StorageService.get_file_content(file.oss_key)
+                    if file_content is not None:
+                         zf.writestr(archive_name, file_content)
+                    else:
+                        # Log missing file but DO NOT rename it to .txt
+                        print(f"[Warning] File missing in Local & OSS during zip: {local_path} (Key: {file.oss_key})")
+                        pass
 
             # 2. Recurse Subfolders
             subfolders = session.exec(select(Folder).where(Folder.parent_id == folder_obj.id)).all()

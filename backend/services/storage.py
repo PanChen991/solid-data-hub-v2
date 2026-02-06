@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 import os
 import oss2
+from typing import Optional
 from dotenv import load_dotenv
 
 # Load env from .env file
@@ -78,13 +79,21 @@ class StorageService:
             return True
 
     @staticmethod
-    def get_presigned_url(oss_key: str) -> str:
+    def get_presigned_url(oss_key: str, download_name: Optional[str] = None) -> str:
         """
         Generate presigned URL for secure access.
+        If download_name is provided, force download (Content-Disposition: attachment).
         """
         if bucket:
+            params = {}
+            if download_name:
+                from urllib.parse import quote
+                encoded_name = quote(download_name)
+                # OSS specific param to force download with filename
+                params['response-content-disposition'] = f"attachment; filename*=UTF-8''{encoded_name}"
+            
             # Generate URL valid for 1 hour (3600 seconds)
-            return bucket.sign_url('GET', oss_key, 3600)
+            return bucket.sign_url('GET', oss_key, 3600, params=params)
         else:
             # Local dev fallback
             return f"http://localhost:8001/static/uploads/{oss_key}"
@@ -105,3 +114,18 @@ class StorageService:
             # Local Dev Fallback:
             # Return a URL that points to our backend's /files/local-upload/{key}
             return f"http://localhost:8001/files/local-upload/{oss_key}"
+
+    @staticmethod
+    def get_file_content(oss_key: str) -> "Optional[bytes]":
+        """
+        Retrieve file content from OSS.
+        Returns bytes if found, None otherwise.
+        """
+        if bucket:
+            try:
+                result = bucket.get_object(oss_key)
+                return result.read()
+            except Exception as e:
+                print(f"OSS Download Error for key {oss_key}: {e}")
+                return None
+        return None
