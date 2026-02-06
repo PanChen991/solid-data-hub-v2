@@ -241,6 +241,29 @@ export function Documents({ initialFolderId }: DocumentsProps) {
 
   const [currentPath, setCurrentPath] = useState<BreadcrumbItem[]>([]);
 
+  const currentSpaceType = useMemo(() => {
+    if (currentPath.length === 0) return undefined;
+    const rootId = String(currentPath[0]?.id);
+    const rootName = currentPath[0]?.name;
+    // Fix: Robust & Strict Public Space Detection
+    // 1. 'public' string is used by virtual root navigation
+    // 2. '1' is the actual database ID for '00_公共资源库' in the current seed
+    // 3. '00_公共资源库' is the immutable system name for this root folder
+    // We REMOVE partial matches and legacy IDs (65/124) to prevent collisions.
+    const isPublic =
+      rootId === 'public' ||
+      rootId === '1' ||
+      rootName === '00_公共资源库';
+
+    // DEBUG LOG
+    console.log('[DebugSpaceType] Strict Mode', { rootId, rootName, isPublic, currentPath });
+
+    if (isPublic) return 'public';
+    if (rootId === 'departments' || rootId === '64' || rootName?.includes('部门')) return 'departments';
+    if (rootId === 'projects') return 'project';
+    return undefined;
+  }, [currentPath]);
+
   // Define Shared Space Item
   const sharedSpaceItem: any = {
     id: 'shared',
@@ -433,8 +456,12 @@ export function Documents({ initialFolderId }: DocumentsProps) {
     // If in shared folder (root), not editable
     if (currentPath.length > 0 && currentPath[currentPath.length - 1].id === 'shared') return false;
 
+    // Restrict editing in Department Root and above (Level <= 3)
+    // 01(1) -> Center(2) -> Department(3) -> [Public Area (4)]
+    if (currentSpaceType === 'departments' && currentPath.length <= 3) return false;
+
     return effectiveFolderRole === 'editor' || effectiveFolderRole === 'admin';
-  }, [user, effectiveFolderRole, currentPath]);
+  }, [user, effectiveFolderRole, currentPath, currentSpaceType]);
 
   useEffect(() => {
     if (highlightId && !loading && currentItems.length > 0) {
@@ -528,9 +555,12 @@ export function Documents({ initialFolderId }: DocumentsProps) {
       return rolesWithWriteAccess.includes(user.role.toLowerCase());
     }
 
+    // Restrict actions in Department Root and above (Level <= 3)
+    if (currentSpaceType === 'departments' && currentPath.length <= 3) return false;
+
     // Inside a folder: check the effective role for THIS folder
     return effectiveFolderRole === 'editor' || effectiveFolderRole === 'admin';
-  }, [user, effectiveFolderRole, currentPath]);
+  }, [user, effectiveFolderRole, currentPath, currentSpaceType]);
 
   // Fetch data when path changes
   useEffect(() => {
@@ -1305,28 +1335,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
   };
   // Determine if we're at first level of a space (for admin selection)
   const isFirstLevelFolder = currentPath.length === 1;
-  const currentSpaceType = useMemo(() => {
-    if (currentPath.length === 0) return undefined;
-    const rootId = String(currentPath[0]?.id);
-    const rootName = currentPath[0]?.name;
-    // Fix: Robust & Strict Public Space Detection
-    // 1. 'public' string is used by virtual root navigation
-    // 2. '1' is the actual database ID for '00_公共资源库' in the current seed
-    // 3. '00_公共资源库' is the immutable system name for this root folder
-    // We REMOVE partial matches and legacy IDs (65/124) to prevent collisions.
-    const isPublic =
-      rootId === 'public' ||
-      rootId === '1' ||
-      rootName === '00_公共资源库';
 
-    // DEBUG LOG
-    console.log('[DebugSpaceType] Strict Mode', { rootId, rootName, isPublic, currentPath });
-
-    if (isPublic) return 'public';
-    if (rootId === 'departments' || rootId === '64' || rootName?.includes('部门')) return 'departments';
-    if (rootId === 'projects') return 'project';
-    return undefined;
-  }, [currentPath]);
 
   const handleSearch = useCallback((filters: SearchFilters) => {
     if (!filters.query && filters.types.length === 0 && filters.authors.length === 0) {

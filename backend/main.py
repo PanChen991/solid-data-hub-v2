@@ -433,11 +433,14 @@ async def get_document_content(
          raise HTTPException(status_code=403, detail="Permission denied")
 
     # Construct local path
-    local_path = os.path.join(UPLOAD_DIR, doc.oss_key)
+    if doc.oss_key.startswith(f"{UPLOAD_DIR}/"):
+        local_path = doc.oss_key
+    else:
+        local_path = os.path.join(UPLOAD_DIR, doc.oss_key)
     
     # If file exists locally, serve it
     if os.path.exists(local_path):
-        return FileResponse(local_path, filename=doc.name)
+        return FileResponse(local_path, filename=doc.name, content_disposition_type="attachment")
     
     
     # If not local, try OSS Redirection
@@ -484,14 +487,23 @@ async def get_folder_zip(
             # 1. Add Files
             files = session.exec(select(Document).where(Document.folder_id == folder_obj.id, Document.is_deleted == False)).all()
             for file in files:
-                # Assuming local storage based on current code context
-                local_path = os.path.join(UPLOAD_DIR, file.oss_key)
+                # ROBUST PATH RESOLUTION:
+                # Handle cases where oss_key might unintentionally start with UPLOAD_DIR
+                if file.oss_key.startswith(f"{UPLOAD_DIR}/"):
+                    local_path = file.oss_key
+                else:
+                    local_path = os.path.join(UPLOAD_DIR, file.oss_key)
+                
                 archive_name = f"{current_path}/{file.name}"
+                
                 if os.path.exists(local_path):
                     zf.write(local_path, arcname=archive_name)
                 else:
-                    # If file missing, maybe add a placeholder text file?
-                    zf.writestr(f"{archive_name}.txt", "File not found on server.")
+                    # Log missing file but DO NOT rename it to .txt
+                    print(f"[Warning] File missing during zip: {local_path}")
+                    # Keep original extension for the entry if we keep it, or just skip.
+                    # Skipping is cleaner than a broken txt file.
+                    pass
 
             # 2. Recurse Subfolders
             subfolders = session.exec(select(Folder).where(Folder.parent_id == folder_obj.id)).all()

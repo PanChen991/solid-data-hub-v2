@@ -174,8 +174,8 @@ export function UploadDialog({ open, onOpenChange, currentPath, currentFolderId,
 
     const traverseEntry = async (entry: any, path: string = "") => {
       if (entry.isFile) {
-        // Filter system files (e.g. .DS_Store, Thumbs.db)
-        if (entry.name.startsWith('.') || entry.name === 'Thumbs.db') return;
+        // Filter system files (e.g. .DS_Store, Thumbs.db) and temporary lock files
+        if (entry.name.startsWith('.') || entry.name.startsWith('~$') || entry.name === 'Thumbs.db') return;
 
         const file = await new Promise<File>((resolve) => entry.file(resolve));
         // Manually set webkitRelativePath since it's read-only, we'll store it in a custom property 
@@ -224,9 +224,9 @@ export function UploadDialog({ open, onOpenChange, currentPath, currentFolderId,
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      // Filter system files
+      // Filter system files and temporary lock files (e.g. ~$Doc.docx)
       const selectedFiles = Array.from(e.target.files).filter(f =>
-        !f.name.startsWith('.') && f.name !== 'Thumbs.db'
+        !f.name.startsWith('.') && !f.name.startsWith('~$') && f.name !== 'Thumbs.db'
       );
       addFiles(selectedFiles);
     }
