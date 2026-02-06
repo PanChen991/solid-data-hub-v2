@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useUsers } from '@/hooks/useDatabase';
+import { Eye, EyeOff } from 'lucide-react';
 
 interface ChangePasswordDialogProps {
     open: boolean;
@@ -15,6 +16,8 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const { updateSelf } = useUsers();
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -36,16 +39,13 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
         try {
             const { error } = await updateSelf(password);
             if (error) {
-                toast.error('修改密码失败');
+                console.error(error);
+                toast.error('修改密码失败: ' + (error.message || '未知错误'));
             } else {
                 toast.success('修改密码成功，请重新登录');
                 onOpenChange(false);
                 setPassword('');
                 setConfirmPassword('');
-                // Optional: Trigger logout? Or let user do it.
-                // Usually good UX to force re-login or just let them stay.
-                // Plan says "Logout and login with new password" -> Manual. 
-                // We can just close dialog.
             }
         } catch (error) {
             console.error(error);
@@ -64,23 +64,43 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
                 <form onSubmit={handleSubmit} className="space-y-4 py-4">
                     <div className="space-y-2">
                         <Label htmlFor="new-password">新密码</Label>
-                        <Input
-                            id="new-password"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="输入新密码"
-                        />
+                        <div className="relative">
+                            <Input
+                                id="new-password"
+                                type={showPassword ? "text" : "password"}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="输入新密码"
+                                className="pr-10"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                            >
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                        </div>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="confirm-password">确认新密码</Label>
-                        <Input
-                            id="confirm-password"
-                            type="password"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            placeholder="再次输入新密码"
-                        />
+                        <div className="relative">
+                            <Input
+                                id="confirm-password"
+                                type={showConfirmPassword ? "text" : "password"}
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                placeholder="再次输入新密码"
+                                className="pr-10"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                            >
+                                {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

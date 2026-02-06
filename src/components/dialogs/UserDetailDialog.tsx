@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { api } from '@/lib/api';
 import {
     Dialog,
     DialogContent,
@@ -11,7 +12,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { User, Folder, FileText, Share2, Shield, History, Building2, ChevronRight, ChevronDown, Archive, Trash2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
+import { useUsers } from '@/hooks/useDatabase';
 import {
     Table,
     TableBody,
@@ -55,6 +59,9 @@ export function UserDetailDialog({ open, onOpenChange, user }: UserDetailDialogP
     const [history, setHistory] = useState<ShareHistoryItem[]>([]);
     const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
     const [loading, setLoading] = useState(false);
+    const [adminNewPassword, setAdminNewPassword] = useState('');
+    const { user: currentUser } = useAuth();
+    const { updateUser } = useUsers();
 
     useEffect(() => {
         if (open && user) {
@@ -65,21 +72,16 @@ export function UserDetailDialog({ open, onOpenChange, user }: UserDetailDialogP
     const fetchData = async () => {
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
             // Fetch Permissions
-            const permRes = await fetch(`http://localhost:8000/users/${user.id}/permissions`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (permRes.ok) {
-                setPermissions(await permRes.json());
+            const { data: permData, error: permError } = await api.get<PermissionItem[]>(`/users/${user.id}/permissions`);
+            if (!permError && permData) {
+                setPermissions(permData);
             }
 
             // Fetch Share History
-            const histRes = await fetch(`http://localhost:8000/users/${user.id}/shares`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (histRes.ok) {
-                setHistory(await histRes.json());
+            const { data: histData, error: histError } = await api.get<ShareHistoryItem[]>(`/users/${user.id}/shares`);
+            if (!histError && histData) {
+                setHistory(histData);
             }
         } catch (error) {
             console.error('Failed to fetch user details:', error);
@@ -93,12 +95,9 @@ export function UserDetailDialog({ open, onOpenChange, user }: UserDetailDialogP
         if (!confirm(`确定要移除对 "${resourceName}" 的单独授权吗？`)) return;
 
         try {
-            const res = await fetch(`http://localhost:8000/share/${shareId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
+            const { error } = await api.delete(`/share/${shareId}`);
 
-            if (res.ok) {
+            if (!error) {
                 toast.success('权限已移除');
                 fetchData(); // Refresh
             } else {
@@ -106,6 +105,28 @@ export function UserDetailDialog({ open, onOpenChange, user }: UserDetailDialogP
             }
         } catch (e) {
             toast.error('操作异常');
+        }
+    };
+
+    const handleAdminResetPassword = async () => {
+        if (!adminNewPassword) return;
+        if (!confirm(`确定将用户 ${user.username} 的密码重置为 "${adminNewPassword}" 吗？`)) return;
+
+        setLoading(true);
+        try {
+            const { error } = await updateUser(user.id, { password: adminNewPassword });
+            if (error) {
+                console.error(error);
+                toast.error('重置失败');
+            } else {
+                toast.success('密码重置成功');
+                setAdminNewPassword('');
+            }
+        } catch (e) {
+            console.error(e);
+            toast.error('操作异常');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -346,6 +367,41 @@ export function UserDetailDialog({ open, onOpenChange, user }: UserDetailDialogP
                                                 </div>
                                             </div>
                                         </div>
+
+                                        {/* Admin Password Reset Section */}
+                                        {currentUser?.role === 'super_admin' && (
+                                            <div className="pt-6 border-t mt-6">
+                                                <h4 className="text-sm font-medium mb-3 flex items-center gap-2 text-destructive">
+                                                    <Shield className="w-4 h-4" />
+                                                    管理员操作区
+                                                </h4>
+                                                <div className="bg-destructive/5 rounded-lg p-4 border border-destructive/10">
+                                                    <label className="text-xs font-medium block mb-2 text-destructive/80">
+                                                        强制重置密码
+                                                    </label>
+                                                    <div className="flex gap-2">
+                                                        <Input
+                                                            type="text"
+                                                            placeholder="输入新密码"
+                                                            className="h-9 bg-background"
+                                                            value={adminNewPassword}
+                                                            onChange={(e) => setAdminNewPassword(e.target.value)}
+                                                        />
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="sm"
+                                                            disabled={!adminNewPassword || loading}
+                                                            onClick={handleAdminResetPassword}
+                                                        >
+                                                            确认重置
+                                                        </Button>
+                                                    </div>
+                                                    <p className="text-[10px] text-muted-foreground mt-2">
+                                                        * 此操作将强制修改该用户的登录密码，请谨慎操作。
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </TabsContent>

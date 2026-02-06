@@ -563,32 +563,6 @@ async def create_user(
     session.refresh(new_user)
     return new_user
 
-@app.put("/users/{user_id}", response_model=User)
-async def update_user(
-    user_id: int,
-    user_in: UserUpdate,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_active_superuser)
-):
-    from models import Role
-    db_user = session.get(User, user_id)
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    update_data = user_in.dict(exclude_unset=True)
-    if "password" in update_data:
-        update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
-    if "role" in update_data:
-        update_data["role"] = Role(update_data["role"])
-    
-    for field, value in update_data.items():
-        setattr(db_user, field, value)
-    
-    session.add(db_user)
-    session.commit()
-    session.refresh(db_user)
-    return db_user
-
 @app.put("/users/me", response_model=User)
 async def update_self(
     user_in: UserUpdate,
@@ -618,6 +592,32 @@ async def update_self(
     session.commit()
     session.refresh(current_user)
     return current_user
+
+@app.put("/users/{user_id}", response_model=User)
+async def update_user(
+    user_id: int,
+    user_in: UserUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_active_superuser)
+):
+    from models import Role
+    db_user = session.get(User, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_data = user_in.dict(exclude_unset=True)
+    if "password" in update_data:
+        update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
+    if "role" in update_data:
+        update_data["role"] = Role(update_data["role"])
+    
+    for field, value in update_data.items():
+        setattr(db_user, field, value)
+    
+    session.add(db_user)
+    session.commit()
+    session.refresh(db_user)
+    return db_user
 
 @app.delete("/users/{user_id}")
 async def delete_user(
@@ -1882,13 +1882,45 @@ async def get_user_permissions(
     for f in owned_folders:
         add_perm("folder", f.id, f.name, "owner", "Owner", f.parent_id)
 
-    # 2. Department Folders
+    # 2. Department Folders (Hierarchy)
+    # Fix: User should see folders from their department AND all ancestor departments.
+    # Fix: Role should be dynamic (Editor/Viewer), not hardcoded.
+    perm_service = PermissionService(session)
     if target_user.department_id:
-        dept = session.get(Department, target_user.department_id)
-        dept_name = dept.name if dept else "Department"
-        dept_folders = session.exec(select(Folder).where(Folder.space_type == SpaceType.DEPARTMENT, Folder.department_id == target_user.department_id)).all()
-        for f in dept_folders:
-            add_perm("folder", f.id, f.name, "viewer", f"Department: {dept_name}", f.parent_id)
+        current_dept_id = target_user.department_id
+        ancestors = []
+        dept_names = {}
+        
+        # Traverse up: Collect all parent departments
+        for _ in range(10): # Depth limit
+            if current_dept_id is None:
+                break
+            dept = session.get(Department, current_dept_id)
+            if not dept:
+                break
+            ancestors.append(current_dept_id)
+            dept_names[current_dept_id] = dept.name
+            current_dept_id = dept.parent_id
+            
+        if ancestors:
+            # Fetch all folders belonging to these departments
+            dept_folders = session.exec(select(Folder).where(
+                Folder.space_type == SpaceType.DEPARTMENT, 
+                Folder.department_id.in_(ancestors)
+            )).all()
+            
+            for f in dept_folders:
+                # Calculate effective role (e.g. Editor if member, or Viewer if just browsing)
+                # Note: get_effective_role checks strict write permissions
+                eff_role = perm_service.get_effective_role(target_user, f)
+                
+                # Format Source
+                src_dept_name = dept_names.get(f.department_id, "Department")
+                source_desc = f"Department: {src_dept_name}"
+                if f.department_id != target_user.department_id:
+                     source_desc += " (Inherited)"
+                
+                add_perm("folder", f.id, f.name, eff_role, source_desc, f.parent_id)
             
     # 3. Project Memberships
     project_memberships = session.exec(select(ProjectMember).where(ProjectMember.user_id == user_id)).all()
