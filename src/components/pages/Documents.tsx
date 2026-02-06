@@ -284,6 +284,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
   const [loading, setLoading] = useState(!!initialFolderId); // Start loading if deep link provided
   const [refreshKey, setRefreshKey] = useState(0); // For forcing reloads
   const [currentFolder, setCurrentFolder] = useState<any>(null); // To store current folder metadata (e.g. isRestricted)
+  const [resolvedFolderId, setResolvedFolderId] = useState<string | undefined>(undefined); // NEW: Store real numeric ID for actions
 
   // Deep Link Handling
   useEffect(() => {
@@ -572,6 +573,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
       try {
         // Level 1: Root
         if (currentPath.length === 0) {
+          setResolvedFolderId(undefined); // Reset for root
           // Dynamic Root Mapping for "00_公共资源库"
           const { data: publicRoots } = await getFolders(undefined, 'public');
           const root00 = publicRoots?.find(f => f.name === '00_公共资源库');
@@ -626,6 +628,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
 
         // Special handling for legacy/mock roots
         if (rootId === 'departments' && currentPath.length === 1) {
+          setResolvedFolderId(undefined); // Reset for department list
           const { data } = await getDepartments();
           if (data) {
             let rootDepts = data.filter(d => !d.parent_id);
@@ -664,6 +667,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
             });
           }
         } else if (rootId === 'projects' && currentPath.length === 1) {
+          setResolvedFolderId(undefined); // Reset for project list
           const { data } = await getProjects();
           if (data) {
             newItems = data.map(p => ({
@@ -681,6 +685,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
             }));
           }
         } else if (rootId === 'shared' && currentPath.length === 1) {
+          setResolvedFolderId(undefined); // Reset for shared list
           const { data, error } = await getSharedResources();
           console.log('Shared resources loaded (fetchData):', data, 'Error:', error); // Debug log
 
@@ -781,6 +786,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
                 // I updated the interface in useDatabase.tsx, so it should be fine if imported.
                 if (d && d.root_folder_id) {
                   deptRootFolderId = d.root_folder_id.toString();
+                  setResolvedFolderId(deptRootFolderId); // NEW: Set resolved ID
                 }
               }
 
@@ -909,6 +915,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
             }
           } else if (currentIdStr === 'public') {
             // Public Resource Library Virtual Root
+            setResolvedFolderId(undefined); // Reset for public virtual root
             // Fetch directly from API using mapped 'public' logic in useDatabase
             const { data: folders } = await getFolders('public');
             const { data: docs } = await getDocuments(); // Root docs? usually public root doesn't have loose docs, but if so. 
@@ -951,6 +958,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
             newItems = [...mappedFolders, ...mappedDocs];
           } else if (!isNaN(Number(currentId))) {
             // Standard Folder (Public Root 00, or Deep Folder)
+            setResolvedFolderId(currentIdStr); // NEW: Set resolved ID
             const { data: folders } = await getFolders(currentIdStr);
             const { data: docs } = await getDocuments(currentIdStr);
 
@@ -1763,7 +1771,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
           if (!open) setDroppedFiles([]);
         }}
         currentPath={currentPathString}
-        currentFolderId={currentFolderId}
+        currentFolderId={resolvedFolderId || currentFolderId}
         parentPermission={parentPermission}
         spaceType={currentSpaceType as any}
         onUploadSuccess={() => setRefreshKey(prev => prev + 1)}
@@ -1779,6 +1787,7 @@ export function Documents({ initialFolderId }: DocumentsProps) {
           console.log('Creating folder:', { name, perm, admins, role, isParentRestricted: currentFolder?.is_restricted });
           handleCreateFolder(name, perm, admins, role);
         }}
+        currentFolderId={resolvedFolderId || currentFolderId} // NEW: Pass resolved ID for parent check logic in dialog if needed
         parentPermission={parentPermission}
         isFirstLevel={isFirstLevelFolder}
         spaceType={currentSpaceType}
